@@ -2,20 +2,20 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <!-- 关键：禁止用户缩放，适配手机屏幕 -->
+    <!-- 禁止用户缩放，适配手机屏幕 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D 手势交互 (全平台通用版)</title>
+    <title>3D 手势交互 (完美适配版)</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; user-select: none; -webkit-tap-highlight-color: transparent; }
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
         
-        /* 摄像头小窗 (手机上可以稍微缩小一点) */
+        /* 摄像头小窗 */
         .input_video { 
             position: absolute; bottom: 10px; right: 10px; 
-            width: 120px; height: 90px; 
+            width: 100px; height: 75px; /* 手机上改小一点 */
             border-radius: 8px; opacity: 0.6; z-index: 10; 
             transform: scaleX(-1); border: 2px solid #333; 
-            pointer-events: none; /* 防止挡住操作 */
+            pointer-events: none; 
         }
         
         /* 交互区域 (静止圈) */
@@ -37,26 +37,27 @@
             box-shadow: 0 0 10px #00ffcc;
         }
 
-        /* 顶部状态栏 */
+        /* ======== 顶部状态栏 (PC默认位置) ======== */
         #status-bar {
             position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-            z-index: 100; display: flex; gap: 15px; width: 90%; justify-content: center;
+            z-index: 100; display: flex; gap: 15px; width: auto; justify-content: center;
+            pointer-events: none; /* 防止挡住手势 */
         }
         .status-pill {
-            padding: 8px 16px; border-radius: 20px; background: rgba(0,0,0,0.6);
-            border: 1px solid rgba(255,255,255,0.2); color: #aaa; font-weight: bold; font-size: 13px;
+            padding: 8px 20px; border-radius: 20px; background: rgba(0,0,0,0.6);
+            border: 1px solid rgba(255,255,255,0.2); color: #aaa; font-weight: bold; font-size: 14px;
             backdrop-filter: blur(4px); transition: all 0.3s; white-space: nowrap;
         }
         .active-pill { border-color: #00ffcc; color: #00ffcc; box-shadow: 0 0 10px rgba(0,255,204,0.2); }
         .locked-pill { border-color: #ff3366; color: #ff3366; box-shadow: 0 0 15px rgba(255,51,102,0.4); background: rgba(0,0,0,0.8); }
 
-        /* ======== 右上角按钮组 (帮助 & 设置) ======== */
+        /* ======== 右上角按钮组 ======== */
         .top-btn-group {
             position: absolute; top: 20px; right: 20px; z-index: 200;
             display: flex; gap: 15px;
         }
         .icon-btn {
-            width: 44px; height: 44px; border-radius: 50%; /* 加大触控区域 */
+            width: 44px; height: 44px; border-radius: 50%;
             background: rgba(20, 20, 20, 0.6); border: 1px solid rgba(255,255,255,0.3);
             color: white; font-size: 20px; display: flex; justify-content: center; align-items: center;
             cursor: pointer; backdrop-filter: blur(5px); transition: all 0.2s;
@@ -64,14 +65,12 @@
         .icon-btn:active { transform: scale(0.9); }
         .icon-btn.active { border-color: #00ffcc; color: #00ffcc; background: rgba(0, 255, 204, 0.15); }
 
-        /* ======== 设置面板 (默认隐藏，点击齿轮弹出) ======== */
+        /* ======== 设置面板 ======== */
         #settings-panel {
-            position: absolute; bottom: 90px; left: 20px; z-index: 100;
+            position: absolute; bottom: 100px; left: 20px; z-index: 100;
             background: rgba(15, 15, 15, 0.9); padding: 20px; border-radius: 16px;
             border: 1px solid rgba(255,255,255,0.15); color: white; width: 280px;
             backdrop-filter: blur(15px); box-shadow: 0 10px 40px rgba(0,0,0,0.6);
-            
-            /* 动画效果 */
             transform: scale(0.95); opacity: 0; visibility: hidden; pointer-events: none;
             transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             transform-origin: bottom left;
@@ -82,12 +81,8 @@
         .setting-group { margin-bottom: 18px; }
         .setting-label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px; color: #ccc; }
         .setting-val { color: #00ffcc; font-weight: bold; font-family: monospace; }
-        
-        /* 优化滑块触摸体验 */
         input[type=range] { width: 100%; cursor: pointer; accent-color: #00ffcc; height: 6px; border-radius: 3px; }
         select { width: 100%; background: #222; color: white; border: 1px solid #444; padding: 10px; border-radius: 8px; outline: none; font-size: 14px; }
-        
-        /* 颜色选择器 */
         .color-picker-row { display: flex; gap: 10px; align-items: center; }
         input[type=color] { border: none; width: 100%; height: 35px; border-radius: 6px; cursor: pointer; background: none; padding: 0; }
 
@@ -113,6 +108,8 @@
             color: white; font-size: 24px; display: flex; justify-content: center; align-items: center;
             z-index: 100; backdrop-filter: blur(5px); cursor: pointer; transition: all 0.2s;
             box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+            /* 禁止长按选中文本 */
+            -webkit-user-select: none;
         }
         #lock-btn-mobile:active { transform: translateX(-50%) scale(0.9); }
         #lock-btn-mobile.locked {
@@ -122,11 +119,25 @@
 
         #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 18px; z-index: 200; pointer-events: none; text-align: center; width: 80%; }
         
-        /* 手机竖屏适配 */
+        /* ======== 关键修正：手机端媒体查询适配 ======== */
         @media (max-width: 600px) {
-            #settings-panel { left: 50%; transform: translateX(-50%) scale(0.95); bottom: 100px; width: 85%; transform-origin: bottom center; }
+            /* 1. 状态栏下移，避开右上角按钮 */
+            #status-bar {
+                top: 80px; /* 移到按钮下方 */
+                width: 95%;
+                gap: 8px;
+            }
+            .status-pill {
+                padding: 6px 12px; /* 稍微改小一点 */
+                font-size: 12px;
+            }
+
+            /* 2. 设置面板居中 */
+            #settings-panel { left: 50%; transform: translateX(-50%) scale(0.95); bottom: 110px; width: 85%; transform-origin: bottom center; }
             #settings-panel.show { transform: translateX(-50%) scale(1); }
-            #help-popup { right: 50%; transform: translateX(50%) translateY(-10px); width: 85%; top: 80px; }
+            
+            /* 3. 帮助弹窗位置 */
+            #help-popup { right: 50%; transform: translateX(50%) translateY(-10px); width: 85%; top: 120px; }
             #help-popup.show { transform: translateX(50%) translateY(0); }
         }
     </style>
@@ -172,15 +183,16 @@
     <div id="dead-zone"></div>
     <div id="hand-cursor"></div>
 
+    <!-- 状态栏 (手机上会自动下移) -->
     <div id="status-bar">
         <div class="status-pill" id="status-lock">自由操控</div>
         <div class="status-pill" id="status-action">等待手势...</div>
     </div>
 
-    <!-- 底部大锁定按钮 (手机/电脑通用) -->
+    <!-- 底部大锁定按钮 -->
     <div id="lock-btn-mobile">🔓</div>
 
-    <!-- 设置面板 (隐藏式) -->
+    <!-- 设置面板 -->
     <div id="settings-panel">
         <div class="panel-header">🎮 设置 (点击齿轮关闭)</div>
         
@@ -245,7 +257,6 @@
         const targetPositions = new Float32Array(PARTICLE_COUNT * 3);
         const currentPositions = new Float32Array(PARTICLE_COUNT * 3);
         
-        // DOM Elements
         const cursor = document.getElementById('hand-cursor');
         const deadZone = document.getElementById('dead-zone');
         const statusLock = document.getElementById('status-lock');
@@ -261,14 +272,12 @@
         const modelSelect = document.getElementById('model-select');
         const colorPicker = document.getElementById('color-picker');
         
-        // Buttons
         const btnSettings = document.getElementById('btn-settings');
         const btnHelp = document.getElementById('btn-help');
         const settingsPanel = document.getElementById('settings-panel');
         const helpPopup = document.getElementById('help-popup');
         const lockBtn = document.getElementById('lock-btn-mobile');
 
-        // State
         const state = {
             model: 'heart', color: '#ff0055', isHandDetected: false, isLocked: false,
             currentScale: 1.5, zoomSpeed: 0.03, minScale: 0.5, maxScale: 6.0,
@@ -279,7 +288,6 @@
         };
 
         function initDOMEvents() {
-            // 滑块逻辑
             inputOpen.addEventListener('input', (e) => {
                 state.openThreshold = parseFloat(e.target.value);
                 valOpen.innerText = state.openThreshold.toFixed(2);
@@ -295,7 +303,6 @@
                 updateDeadZoneVisuals();
             });
             
-            // 模型 & 颜色
             modelSelect.addEventListener('change', (e) => {
                 state.model = e.target.value;
                 generateShape(state.model);
@@ -304,38 +311,33 @@
             });
             colorPicker.addEventListener('input', (e) => { state.color = e.target.value; });
 
-            // 键盘空格键
             document.addEventListener('keydown', (e) => {
                 if (e.code === 'Space') { e.preventDefault(); toggleLock(); }
             });
 
-            // 屏幕锁定按钮 (手机/电脑通用)
             lockBtn.addEventListener('click', (e) => {
-                e.stopPropagation(); // 防止触发其他点击
+                e.stopPropagation(); 
                 toggleLock();
             });
+            // 防止移动端点击穿透
+            lockBtn.addEventListener('touchstart', (e) => { e.stopPropagation(); });
 
-            // 设置面板开关
             btnSettings.addEventListener('click', (e) => {
                 e.stopPropagation();
                 settingsPanel.classList.toggle('show');
                 btnSettings.classList.toggle('active');
-                // 关闭帮助
                 helpPopup.classList.remove('show');
                 btnHelp.classList.remove('active');
             });
 
-            // 帮助弹窗开关
             btnHelp.addEventListener('click', (e) => {
                 e.stopPropagation();
                 helpPopup.classList.toggle('show');
                 btnHelp.classList.toggle('active');
-                // 关闭设置
                 settingsPanel.classList.remove('show');
                 btnSettings.classList.remove('active');
             });
 
-            // 点击空白处关闭面板
             document.addEventListener('click', (e) => {
                 if (!settingsPanel.contains(e.target) && e.target !== btnSettings) {
                     settingsPanel.classList.remove('show');
