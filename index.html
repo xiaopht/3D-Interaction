@@ -2,14 +2,21 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 手势交互 (参数调优版)</title>
+    <!-- 关键：禁止用户缩放，适配手机屏幕 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D 手势交互 (全平台通用版)</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; user-select: none; }
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; user-select: none; -webkit-tap-highlight-color: transparent; }
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
         
-        /* 摄像头小窗 */
-        .input_video { position: absolute; bottom: 10px; right: 10px; width: 160px; height: 120px; border-radius: 8px; opacity: 0.6; z-index: 10; transform: scaleX(-1); border: 2px solid #333; }
+        /* 摄像头小窗 (手机上可以稍微缩小一点) */
+        .input_video { 
+            position: absolute; bottom: 10px; right: 10px; 
+            width: 120px; height: 90px; 
+            border-radius: 8px; opacity: 0.6; z-index: 10; 
+            transform: scaleX(-1); border: 2px solid #333; 
+            pointer-events: none; /* 防止挡住操作 */
+        }
         
         /* 交互区域 (静止圈) */
         #dead-zone {
@@ -19,11 +26,11 @@
             border-radius: 50%; pointer-events: none; z-index: 50;
             transition: all 0.2s;
         }
-        #dead-zone.locked { border-color: #ff3366; border-style: solid; background: rgba(255, 51, 102, 0.15); box-shadow: 0 0 30px rgba(255, 51, 102, 0.2); }
-        
+        #dead-zone.locked { border-color: #ff3366; background: rgba(255, 51, 102, 0.15); box-shadow: 0 0 30px rgba(255, 51, 102, 0.2); border-style: solid;}
+
         /* 手势光标 */
         #hand-cursor {
-            position: absolute; width: 20px; height: 20px; 
+            position: absolute; width: 24px; height: 24px; 
             border: 2px solid #00ffcc; background: rgba(0, 255, 204, 0.2);
             border-radius: 50%; transform: translate(-50%, -50%); 
             pointer-events: none; z-index: 51; opacity: 0; transition: opacity 0.2s;
@@ -33,60 +40,95 @@
         /* 顶部状态栏 */
         #status-bar {
             position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-            z-index: 100; display: flex; gap: 20px;
+            z-index: 100; display: flex; gap: 15px; width: 90%; justify-content: center;
         }
         .status-pill {
-            padding: 8px 20px; border-radius: 20px; background: rgba(0,0,0,0.6);
-            border: 1px solid rgba(255,255,255,0.2); color: #aaa; font-weight: bold; font-size: 14px;
-            backdrop-filter: blur(4px); transition: all 0.3s;
+            padding: 8px 16px; border-radius: 20px; background: rgba(0,0,0,0.6);
+            border: 1px solid rgba(255,255,255,0.2); color: #aaa; font-weight: bold; font-size: 13px;
+            backdrop-filter: blur(4px); transition: all 0.3s; white-space: nowrap;
         }
         .active-pill { border-color: #00ffcc; color: #00ffcc; box-shadow: 0 0 10px rgba(0,255,204,0.2); }
         .locked-pill { border-color: #ff3366; color: #ff3366; box-shadow: 0 0 15px rgba(255,51,102,0.4); background: rgba(0,0,0,0.8); }
 
-        /* 左下角面板 */
-        #settings-panel {
-            position: absolute; bottom: 20px; left: 20px; z-index: 100;
-            background: rgba(10, 10, 10, 0.85); padding: 20px; border-radius: 16px;
-            border: 1px solid rgba(255,255,255,0.1); color: white; width: 260px;
-            backdrop-filter: blur(12px); box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        /* ======== 右上角按钮组 (帮助 & 设置) ======== */
+        .top-btn-group {
+            position: absolute; top: 20px; right: 20px; z-index: 200;
+            display: flex; gap: 15px;
         }
-        
-        .panel-header { font-size: 14px; font-weight: bold; color: #fff; margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center;}
-        .setting-group { margin-bottom: 15px; }
-        .setting-label { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; color: #ccc; }
+        .icon-btn {
+            width: 44px; height: 44px; border-radius: 50%; /* 加大触控区域 */
+            background: rgba(20, 20, 20, 0.6); border: 1px solid rgba(255,255,255,0.3);
+            color: white; font-size: 20px; display: flex; justify-content: center; align-items: center;
+            cursor: pointer; backdrop-filter: blur(5px); transition: all 0.2s;
+        }
+        .icon-btn:active { transform: scale(0.9); }
+        .icon-btn.active { border-color: #00ffcc; color: #00ffcc; background: rgba(0, 255, 204, 0.15); }
+
+        /* ======== 设置面板 (默认隐藏，点击齿轮弹出) ======== */
+        #settings-panel {
+            position: absolute; bottom: 90px; left: 20px; z-index: 100;
+            background: rgba(15, 15, 15, 0.9); padding: 20px; border-radius: 16px;
+            border: 1px solid rgba(255,255,255,0.15); color: white; width: 280px;
+            backdrop-filter: blur(15px); box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+            
+            /* 动画效果 */
+            transform: scale(0.95); opacity: 0; visibility: hidden; pointer-events: none;
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            transform-origin: bottom left;
+        }
+        #settings-panel.show { transform: scale(1); opacity: 1; visibility: visible; pointer-events: auto; }
+
+        .panel-header { font-size: 15px; font-weight: bold; color: #fff; margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        .setting-group { margin-bottom: 18px; }
+        .setting-label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 8px; color: #ccc; }
         .setting-val { color: #00ffcc; font-weight: bold; font-family: monospace; }
         
-        input[type=range] { width: 100%; cursor: pointer; accent-color: #00ffcc; height: 4px; border-radius: 2px; }
-        select { width: 100%; background: #222; color: white; border: 1px solid #444; padding: 8px; border-radius: 6px; outline: none; cursor: pointer; font-family: inherit; }
-        select:hover { border-color: #00ffcc; }
+        /* 优化滑块触摸体验 */
+        input[type=range] { width: 100%; cursor: pointer; accent-color: #00ffcc; height: 6px; border-radius: 3px; }
+        select { width: 100%; background: #222; color: white; border: 1px solid #444; padding: 10px; border-radius: 8px; outline: none; font-size: 14px; }
+        
+        /* 颜色选择器 */
         .color-picker-row { display: flex; gap: 10px; align-items: center; }
-        input[type=color] { border: none; width: 40px; height: 30px; cursor: pointer; background: none; padding: 0; }
+        input[type=color] { border: none; width: 100%; height: 35px; border-radius: 6px; cursor: pointer; background: none; padding: 0; }
 
-        /* 悬停说明 */
-        #help-wrapper { position: absolute; top: 20px; right: 20px; z-index: 1000; }
-        #help-icon {
-            width: 40px; height: 40px; border-radius: 50%;
-            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3);
-            color: white; font-size: 20px; font-weight: bold;
-            display: flex; justify-content: center; align-items: center;
-            cursor: help; transition: all 0.3s;
-        }
+        /* ======== 悬停说明弹窗 ======== */
         #help-popup {
-            position: absolute; top: 50px; right: 0; width: 260px;
+            position: absolute; top: 75px; right: 20px; width: 280px;
             background: rgba(20, 20, 20, 0.95); border: 1px solid rgba(0, 255, 204, 0.3);
             border-radius: 12px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            backdrop-filter: blur(10px); color: white;
-            opacity: 0; visibility: hidden; transform: translateY(-10px);
-            transition: all 0.3s; pointer-events: none;
+            backdrop-filter: blur(10px); color: white; z-index: 201;
+            opacity: 0; visibility: hidden; transform: translateY(-10px); transition: all 0.3s;
         }
-        #help-wrapper:hover #help-icon { border-color: #00ffcc; color: #00ffcc; box-shadow: 0 0 15px rgba(0,255,204,0.3); }
-        #help-wrapper:hover #help-popup { opacity: 1; visibility: visible; transform: translateY(0); }
-        .help-item { display: flex; gap: 12px; margin-bottom: 12px; align-items: flex-start; }
-        .help-emoji { font-size: 18px; }
-        .help-text h4 { margin: 0 0 2px 0; color: #00ffcc; font-size: 13px; }
-        .help-text p { margin: 0; font-size: 11px; color: #aaa; line-height: 1.4; }
+        #help-popup.show { opacity: 1; visibility: visible; transform: translateY(0); }
+        .help-item { display: flex; gap: 12px; margin-bottom: 15px; align-items: flex-start; }
+        .help-emoji { font-size: 20px; }
+        .help-text h4 { margin: 0 0 4px 0; color: #00ffcc; font-size: 14px; }
+        .help-text p { margin: 0; font-size: 12px; color: #aaa; line-height: 1.4; }
 
-        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 24px; z-index: 200; pointer-events: none; text-align: center; }
+        /* ======== 手机专用锁定按钮 (屏幕底部) ======== */
+        #lock-btn-mobile {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            width: 60px; height: 60px; border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255, 255, 255, 0.3);
+            color: white; font-size: 24px; display: flex; justify-content: center; align-items: center;
+            z-index: 100; backdrop-filter: blur(5px); cursor: pointer; transition: all 0.2s;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+        }
+        #lock-btn-mobile:active { transform: translateX(-50%) scale(0.9); }
+        #lock-btn-mobile.locked {
+            background: rgba(255, 51, 102, 0.2); border-color: #ff3366; color: #ff3366;
+            box-shadow: 0 0 20px rgba(255, 51, 102, 0.4);
+        }
+
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 18px; z-index: 200; pointer-events: none; text-align: center; width: 80%; }
+        
+        /* 手机竖屏适配 */
+        @media (max-width: 600px) {
+            #settings-panel { left: 50%; transform: translateX(-50%) scale(0.95); bottom: 100px; width: 85%; transform-origin: bottom center; }
+            #settings-panel.show { transform: translateX(-50%) scale(1); }
+            #help-popup { right: 50%; transform: translateX(50%) translateY(-10px); width: 85%; top: 80px; }
+            #help-popup.show { transform: translateX(50%) translateY(0); }
+        }
     </style>
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -94,32 +136,35 @@
 </head>
 <body>
 
-    <div id="loading">系统初始化中...</div>
+    <div id="loading">正在初始化...<br><span style="font-size:12px; opacity:0.6">请允许摄像头权限</span></div>
 
-    <!-- 悬停说明 -->
-    <div id="help-wrapper">
-        <div id="help-icon">?</div>
-        <div id="help-popup">
-            <div class="help-item">
-                <div class="help-emoji">⌨️</div>
-                <div class="help-text">
-                    <h4>空格键锁定</h4>
-                    <p>按 Space 键 = 画面冻结/解冻<br>方便固定视角观察</p>
-                </div>
+    <!-- 右上角按钮组 -->
+    <div class="top-btn-group">
+        <div class="icon-btn" id="btn-settings">⚙️</div>
+        <div class="icon-btn" id="btn-help">?</div>
+    </div>
+
+    <!-- 帮助弹窗 -->
+    <div id="help-popup">
+        <div class="help-item">
+            <div class="help-emoji">🔓</div>
+            <div class="help-text">
+                <h4>锁定/解锁</h4>
+                <p>电脑：按 <strong>空格键</strong><br>手机：点底部 <strong>锁图标</strong></p>
             </div>
-            <div class="help-item">
-                <div class="help-emoji">🖐️</div>
-                <div class="help-text">
-                    <h4>缩放控制</h4>
-                    <p>捏合 = 缩小 | 张开 = 放大</p>
-                </div>
+        </div>
+        <div class="help-item">
+            <div class="help-emoji">🖐️</div>
+            <div class="help-text">
+                <h4>缩放 (Zoom)</h4>
+                <p>捏合手指 = 缩小<br>张开手指 = 放大</p>
             </div>
-            <div class="help-item">
-                <div class="help-emoji">🕹️</div>
-                <div class="help-text">
-                    <h4>旋转控制</h4>
-                    <p>手移出圆圈 = 旋转物体</p>
-                </div>
+        </div>
+        <div class="help-item">
+            <div class="help-emoji">🕹️</div>
+            <div class="help-text">
+                <h4>旋转 (Rotate)</h4>
+                <p>手移出屏幕中心圈 = 旋转</p>
             </div>
         </div>
     </div>
@@ -128,13 +173,16 @@
     <div id="hand-cursor"></div>
 
     <div id="status-bar">
-        <div class="status-pill" id="status-lock">状态: 自由操控</div>
+        <div class="status-pill" id="status-lock">自由操控</div>
         <div class="status-pill" id="status-action">等待手势...</div>
     </div>
 
-    <!-- 整合面板 -->
+    <!-- 底部大锁定按钮 (手机/电脑通用) -->
+    <div id="lock-btn-mobile">🔓</div>
+
+    <!-- 设置面板 (隐藏式) -->
     <div id="settings-panel">
-        <div class="panel-header">🎮 控制中心</div>
+        <div class="panel-header">🎮 设置 (点击齿轮关闭)</div>
         
         <div class="setting-group">
             <div class="setting-label"><span>选择模型</span></div>
@@ -151,19 +199,16 @@
             <div class="setting-label"><span>粒子颜色</span></div>
             <div class="color-picker-row">
                 <input type="color" id="color-picker" value="#ff0055">
-                <span style="font-size:12px; color:#888;">点击色块修改</span>
             </div>
         </div>
 
         <div style="border-top:1px dashed #333; margin:15px 0;"></div>
 
-        <!-- 修改后的捏合阈值：默认 0.3 -->
         <div class="setting-group">
             <div class="setting-label"><span>🤏 捏合缩小阈值</span> <span id="val-pinch" class="setting-val">0.30</span></div>
             <input type="range" id="input-pinch" min="0.1" max="0.5" step="0.05" value="0.30">
         </div>
 
-        <!-- 修改后的放大阈值：默认 0.9 -->
         <div class="setting-group">
             <div class="setting-label"><span>🖐️ 张开放大阈值</span> <span id="val-open" class="setting-val">0.90</span></div>
             <input type="range" id="input-open" min="0.6" max="1.2" step="0.05" value="0.90">
@@ -172,10 +217,6 @@
         <div class="setting-group">
             <div class="setting-label"><span>⭕ 静止圈大小</span> <span id="val-radius" class="setting-val">100px</span></div>
             <input type="range" id="input-radius" min="50" max="250" step="10" value="100">
-        </div>
-        
-        <div style="font-size:11px; color:#666; margin-top:10px; border-top:1px solid #333; padding-top:5px;">
-            提示: 按 <strong>空格键 Space</strong> 可随时锁定画面
         </div>
     </div>
 
@@ -204,43 +245,41 @@
         const targetPositions = new Float32Array(PARTICLE_COUNT * 3);
         const currentPositions = new Float32Array(PARTICLE_COUNT * 3);
         
-        // DOM Refs
+        // DOM Elements
         const cursor = document.getElementById('hand-cursor');
         const deadZone = document.getElementById('dead-zone');
         const statusLock = document.getElementById('status-lock');
         const statusAction = document.getElementById('status-action');
         
-        // Inputs
         const inputOpen = document.getElementById('input-open');
         const inputPinch = document.getElementById('input-pinch');
         const inputRadius = document.getElementById('input-radius');
-        
         const valOpen = document.getElementById('val-open');
         const valPinch = document.getElementById('val-pinch');
         const valRadius = document.getElementById('val-radius');
         
         const modelSelect = document.getElementById('model-select');
         const colorPicker = document.getElementById('color-picker');
+        
+        // Buttons
+        const btnSettings = document.getElementById('btn-settings');
+        const btnHelp = document.getElementById('btn-help');
+        const settingsPanel = document.getElementById('settings-panel');
+        const helpPopup = document.getElementById('help-popup');
+        const lockBtn = document.getElementById('lock-btn-mobile');
 
         // State
         const state = {
-            model: 'heart', color: '#ff0055', isHandDetected: false, 
-            isLocked: false, 
-            
-            // 缩放参数修改
+            model: 'heart', color: '#ff0055', isHandDetected: false, isLocked: false,
             currentScale: 1.5, zoomSpeed: 0.03, minScale: 0.5, maxScale: 6.0,
-            pinchThreshold: 0.30, // 初始 0.3
-            openThreshold: 0.90,  // 初始 0.9
-            handRawOpenness: 0.5,
-            
-            // 旋转
+            pinchThreshold: 0.30, openThreshold: 0.90, handRawOpenness: 0.5,
             handX: 0.5, handY: 0.5, deadZoneRadiusPx: 100,
             targetRotSpeedX: 0, targetRotSpeedY: 0, curRotSpeedX: 0, curRotSpeedY: 0,
             rotationSensitivity: 0.0001
         };
 
         function initDOMEvents() {
-            // 滑块监听
+            // 滑块逻辑
             inputOpen.addEventListener('input', (e) => {
                 state.openThreshold = parseFloat(e.target.value);
                 valOpen.innerText = state.openThreshold.toFixed(2);
@@ -265,17 +304,63 @@
             });
             colorPicker.addEventListener('input', (e) => { state.color = e.target.value; });
 
-            // 键盘监听
+            // 键盘空格键
             document.addEventListener('keydown', (e) => {
-                if (e.code === 'Space') {
-                    e.preventDefault();
-                    state.isLocked = !state.isLocked;
-                    if (state.isLocked) deadZone.classList.add('locked');
-                    else deadZone.classList.remove('locked');
+                if (e.code === 'Space') { e.preventDefault(); toggleLock(); }
+            });
+
+            // 屏幕锁定按钮 (手机/电脑通用)
+            lockBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); // 防止触发其他点击
+                toggleLock();
+            });
+
+            // 设置面板开关
+            btnSettings.addEventListener('click', (e) => {
+                e.stopPropagation();
+                settingsPanel.classList.toggle('show');
+                btnSettings.classList.toggle('active');
+                // 关闭帮助
+                helpPopup.classList.remove('show');
+                btnHelp.classList.remove('active');
+            });
+
+            // 帮助弹窗开关
+            btnHelp.addEventListener('click', (e) => {
+                e.stopPropagation();
+                helpPopup.classList.toggle('show');
+                btnHelp.classList.toggle('active');
+                // 关闭设置
+                settingsPanel.classList.remove('show');
+                btnSettings.classList.remove('active');
+            });
+
+            // 点击空白处关闭面板
+            document.addEventListener('click', (e) => {
+                if (!settingsPanel.contains(e.target) && e.target !== btnSettings) {
+                    settingsPanel.classList.remove('show');
+                    btnSettings.classList.remove('active');
+                }
+                if (!helpPopup.contains(e.target) && e.target !== btnHelp) {
+                    helpPopup.classList.remove('show');
+                    btnHelp.classList.remove('active');
                 }
             });
 
             updateDeadZoneVisuals();
+        }
+
+        function toggleLock() {
+            state.isLocked = !state.isLocked;
+            if (state.isLocked) {
+                deadZone.classList.add('locked');
+                lockBtn.classList.add('locked');
+                lockBtn.innerText = "🔒";
+            } else {
+                deadZone.classList.remove('locked');
+                lockBtn.classList.remove('locked');
+                lockBtn.innerText = "🔓";
+            }
         }
 
         function updateDeadZoneVisuals() {
@@ -342,7 +427,7 @@
             requestAnimationFrame(() => animate(controls));
 
             if (state.isLocked) {
-                statusLock.innerText = "状态: 🔒 已锁定 (Space)";
+                statusLock.innerText = "🔒 已锁定";
                 statusLock.className = "status-pill locked-pill";
                 statusAction.innerText = "画面已冻结";
                 material.color.set(state.color);
@@ -350,7 +435,7 @@
                 return;
             }
 
-            statusLock.innerText = "状态: 🔓 自由操控";
+            statusLock.innerText = "🔓 自由操控";
             statusLock.className = "status-pill";
 
             const handVal = state.handRawOpenness;
@@ -360,10 +445,10 @@
             if (state.isHandDetected) {
                 if (handVal > state.openThreshold) {
                     state.currentScale += state.zoomSpeed;
-                    actionText = "🔍 放大中..."; actionClass = "active-pill";
+                    actionText = "🔍 放大中"; actionClass = "active-pill";
                 } else if (handVal < state.pinchThreshold) {
                     state.currentScale -= state.zoomSpeed;
-                    actionText = "🤏 缩小中..."; actionClass = "active-pill";
+                    actionText = "🤏 缩小中"; actionClass = "active-pill";
                 } else {
                     actionText = "✋ 保持大小";
                 }
@@ -452,11 +537,8 @@
                     cursor.style.backgroundColor = "rgba(0, 255, 204, 0.2)"; 
                 }
                 
-                if (state.isLocked) {
-                    cursor.style.borderColor = "#ff3366";
-                } else {
-                    cursor.style.borderColor = "#00ffcc";
-                }
+                if (state.isLocked) cursor.style.borderColor = "#ff3366";
+                else cursor.style.borderColor = "#00ffcc";
                 
             } else {
                 state.isHandDetected = false;
